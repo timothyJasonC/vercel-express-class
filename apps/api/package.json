@@ -4,6 +4,7 @@
   "main": "index.js",
   "scripts": {
     "build": "prisma generate && tsc",
+    "postinstall": "prisma generate",
     "dev": "ts-node-dev ./src/index.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
