@@ -1,0 +1,262 @@
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "mysql"
+    url      = env("DATABASE_URL")
+    shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+}
+
+enum Gender {
+    MALE
+    FEMALE
+}
+
+enum Role {
+    warAdm
+    superAdm
+}
+
+enum ProductGender {
+    MEN
+    WOMEN
+    UNISEX
+}
+
+enum ProductTypes {
+    TOPS
+    BOTTOMS
+    ACCESSORIES
+}
+
+enum ProductSize {
+    S
+    M
+    L
+    XL
+    ONESIZE
+}
+
+enum MutationTypes {
+    TRANSFER
+    INBOUND
+    RESTOCK
+    REMOVE
+    TRANSACTION
+    DELETE
+}
+
+enum MutationStatus {
+    WAITING
+    ACCEPTED
+    REJECTED
+}
+
+enum PaymentStatus {
+    PENDING
+    COMPLETED
+    FAILED
+}
+
+enum OrderStatus {
+    CART
+    PENDING_PAYMENT
+    PROCESSED
+    SHIPPED
+    COMPLETED
+    CANCELLED
+}
+
+// FEATURE 1
+model User {
+    id            String        @id @default(uuid())
+    accountActive Boolean       @default(false)
+    username      String?       @unique
+    email         String        @unique
+    password      String?
+    gender        Gender?
+    dob           DateTime?
+    createdAt     DateTime      @default(now())
+    imgUrl        String?       @db.LongText
+    addresses     AddressList[]
+    orders        Order[]
+}
+
+model WishList {
+    id        String   @id @default(uuid())
+    productId String
+    userId    String
+    createdAt DateTime @default(now())
+}
+
+model AddressList {
+    id           String  @id @default(uuid())
+    address      String
+    labelAddress String
+    coordinate   String
+    userID       String
+    city_id      String
+    province_id  String
+    province     String
+    type         String
+    city_name    String
+    postal_code  String
+    mainAddress  Boolean @default(false)
+    user         User    @relation(fields: [userID], references: [id])
+}
+
+model Admin {
+    id            String     @id @default(uuid())
+    role          Role       @default(warAdm)
+    accountActive Boolean    @default(false)
+    fullName      String?
+    email         String     @unique
+    password      String?
+    gender        Gender?
+    dob           DateTime?
+    imgUrl        String?    @db.LongText
+    createdAt     DateTime   @default(now())
+    Warehouse     Warehouse?
+}
+
+model PasswordRequest {
+    id           String    @id @default(uuid())
+    accountId    String    @unique
+    currentToken String?   @db.LongText
+    requestCount Int       @default(0)
+    createdAt    DateTime  @default(now())
+    updatedAt    DateTime? @updatedAt
+}
+
+model Warehouse {
+    id            String             @id @default(uuid())
+    warehouseName String             @unique
+    coordinate    String
+    address       String
+    city_id       String
+    province_id   String
+    province      String
+    type          String
+    city_name     String
+    postal_code   String
+    createdAt     DateTime           @default(now())
+    adminID       String?            @unique
+    isActive      Boolean            @default(true)
+    admin         Admin?             @relation(fields: [adminID], references: [id])
+    products      WarehouseProduct[]
+    mutations     StockMutation[]
+}
+
+model WarehouseProduct {
+    id                String              @id @default(uuid())
+    warehouseID       String
+    productVariantID  String
+    size              ProductSize
+    stock             Int
+    isDelete          Boolean?            @default(false)
+    updatedAt         DateTime?           @default(now())
+    warehouse         Warehouse           @relation(fields: [warehouseID], references: [id])
+    productVariant    ProductVariant      @relation(fields: [productVariantID], references: [id])
+    StockMutationItem StockMutationItem[]
+}
+
+// FEATURE 2
+model Product {
+    id             String           @id @default(uuid())
+    name           String           @unique
+    slug           String           @unique
+    description    String           @db.VarChar(500)
+    price          Int
+    oneSize        Boolean          @default(false)
+    categoryID     String
+    isActive       Boolean?         @default(true)
+    thumbnailURL   String?
+    createdAt      DateTime         @default(now())
+    updatedAt      DateTime?        @default(now())
+    stockUpdatedAt DateTime?
+    images         ProductImage[]
+    variants       ProductVariant[]
+    category       ProductCategory  @relation(fields: [categoryID], references: [id])
+}
+
+model ProductCategory {
+    id       String        @id
+    slug     String?
+    gender   ProductGender
+    type     ProductTypes
+    category String
+    products Product[]
+}
+
+model ProductImage {
+    id        String  @id @default(uuid())
+    productID String
+    image     String  @unique
+    product   Product @relation(fields: [productID], references: [id])
+}
+
+model ProductVariant {
+    id               String             @id @default(uuid())
+    productID        String
+    color            String
+    HEX              String
+    isDeleted        Boolean?           @default(false)
+    image            String             @unique
+    product          Product            @relation(fields: [productID], references: [id])
+    warehouseProduct WarehouseProduct[]
+    orderItems       OrderItem[]
+}
+
+model StockMutation {
+    id                    String              @id @default(uuid())
+    warehouseID           String
+    associatedWarehouseID String?
+    type                  MutationTypes
+    status                MutationStatus?
+    createdAt             DateTime            @default(now())
+    updatedAt             DateTime?
+    warehouse             Warehouse           @relation(fields: [warehouseID], references: [id])
+    StockMutationItem     StockMutationItem[]
+}
+
+model StockMutationItem {
+    id                 String           @id
+    quantity           Int
+    warehouseProductID String
+    stockMutationID    String
+    stockMutation      StockMutation    @relation(fields: [stockMutationID], references: [id])
+    WarehouseProduct   WarehouseProduct @relation(fields: [warehouseProductID], references: [id])
+}
+
+// FEATURE 3
+model Order {
+    id             String        @id @default(uuid())
+    userId         String
+    status         OrderStatus   @default(CART)
+    warehouseId    String?
+    totalAmount    Int           @default(0)
+    addressID      String?
+    shippingMethod String?
+    shippedAt      DateTime?
+    paymentStatus  PaymentStatus
+    createdAt      DateTime      @default(now())
+    updatedAt      DateTime      @updatedAt
+    user           User          @relation(fields: [userId], references: [id])
+    items          OrderItem[]
+}
+
+model OrderItem {
+    id               String         @id @default(uuid())
+    orderId          String
+    productVariantId String
+    warehouseId      String?
+    color            String
+    size             String
+    quantity         Int
+    price            Int
+    createdAt        DateTime       @default(now())
+    updatedAt        DateTime       @updatedAt
+    order            Order          @relation(fields: [orderId], references: [id])
+    productVariant   ProductVariant @relation(fields: [productVariantId], references: [id])
+}

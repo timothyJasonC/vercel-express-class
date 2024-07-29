@@ -7,7 +7,12 @@ import express, {
     NextFunction,
     Router,
 } from 'express';
+import cors from 'cors';
 import { ApiRouter } from './routers/api.router';
+import cron from 'node-cron'
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient()
 
 const PORT = '8000'
 
@@ -19,9 +24,11 @@ export default class App {
         this.configure();
         this.routes();
         this.handleError();
+        this.setupScheduler()
     }
 
     private configure(): void {
+        this.app.use(cors());
         this.app.use(json());
         this.app.use(urlencoded({ extended: true }));
     }
@@ -58,6 +65,47 @@ export default class App {
 
         this.app.use('/api', apiRouter.getRouter())
 
+    }
+
+    private setupScheduler(): void {
+        cron.schedule('0 */1 * * *', async () => {
+            const sevenDaysAgo = new Date();
+            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+            const oneHoursAgo = new Date()
+            oneHoursAgo.setDate(oneHoursAgo.getHours() - 1)
+
+            try {
+                const ordersToUpdate = await prisma.order.findMany({
+                    where: {
+                        status: 'SHIPPED',
+                        shippedAt: {
+                            lt: sevenDaysAgo,
+                        },
+                    },
+                });
+
+                for (const order of ordersToUpdate) {
+                    await prisma.order.update({
+                        where: { id: order.id },
+                        data: { status: 'COMPLETED' },
+                    });
+                }
+
+                const failedOrder = await prisma.order.findMany({
+                    where: { status: 'PENDING_PAYMENT', paymentStatus: 'PENDING', createdAt: { lt: oneHoursAgo } }
+                })
+
+                for (const order of failedOrder) {
+                    await prisma.order.update({
+                        where: { id: order.id },
+                        data: { status: 'CANCELLED', paymentStatus: 'FAILED' },
+                    });
+                }
+
+            } catch (error) {
+                console.error('Error running daily scheduler job:', error);
+            }
+        });
     }
 
     public start(): void {
